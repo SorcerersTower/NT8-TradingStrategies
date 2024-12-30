@@ -1,0 +1,157 @@
+#region Using declarations
+using System;
+using System.Collections.Generic;
+using System.ComponentModel;
+using System.ComponentModel.DataAnnotations;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+using System.Windows;
+using System.Windows.Input;
+using System.Windows.Media;
+using System.Xml.Serialization;
+using NinjaTrader.Cbi;
+using NinjaTrader.Gui;
+using NinjaTrader.Gui.Chart;
+using NinjaTrader.Gui.SuperDom;
+using NinjaTrader.Gui.Tools;
+using NinjaTrader.Data;
+using NinjaTrader.NinjaScript;
+using NinjaTrader.Core.FloatingPoint;
+using NinjaTrader.NinjaScript.Indicators;
+using NinjaTrader.NinjaScript.DrawingTools;
+#endregion
+
+//This namespace holds Strategies in this folder and is required. Do not change it. 
+namespace NinjaTrader.NinjaScript.Strategies.ORB
+{
+	public class OpenRangeBreakout : Strategy
+	{
+		private Order entryLongOrder;
+		private Order entryShortOrder;
+		private Order stopLoss;
+		private Order profitTarget;
+		
+		protected override void OnStateChange()
+		{
+			if (State == State.SetDefaults)
+			{
+				Description = @"Enter the description for your new custom Strategy here.";
+				Name = "OpenRangeBreakout";
+				Calculate = Calculate.OnPriceChange;
+				EntriesPerDirection = 1;
+				EntryHandling = EntryHandling.AllEntries;
+				IsExitOnSessionCloseStrategy = true;
+				ExitOnSessionCloseSeconds = 30;
+				IsFillLimitOnTouch = false;
+				MaximumBarsLookBack = MaximumBarsLookBack.TwoHundredFiftySix;
+				OrderFillResolution = OrderFillResolution.Standard;
+				Slippage = 0;
+				StartBehavior = StartBehavior.WaitUntilFlat;
+				TimeInForce = TimeInForce.Gtc;
+				TraceOrders = false;
+				RealtimeErrorHandling = RealtimeErrorHandling.StopCancelClose;
+				StopTargetHandling = StopTargetHandling.PerEntryExecution;
+				BarsRequiredToTrade = 20;
+				// Disable this property for performance gains in Strategy Analyzer optimizations
+				// See the Help Guide for additional information
+				IsInstantiatedOnEachOptimizationIteration = true;
+				IsUnmanaged = true;
+				ProfitTarget = 20;
+				
+			}
+			else if (State == State.Configure)
+			{
+			}
+		}
+
+		protected override void OnBarUpdate()
+		{
+			if (Time[0].Hour == 09 && Time[0].Minute == 30)
+			{
+				Draw.Line(this, "5 min orb high" + CurrentBar, false, 1, High[0] + TickSize * 1, -1, High[0] + TickSize * 1, Brushes.Orange, DashStyleHelper.Solid, 2, false);
+				Draw.Line(this, "5 min orb low" + CurrentBar, false, 1, Low[0] - TickSize * 1, -1, Low[0] - TickSize * 1, Brushes.Orange, DashStyleHelper.Solid, 2, false);
+				
+				if(entryLongOrder==null && entryShortOrder== null)
+					PlaceBreakoutOrders();
+			}
+		}
+
+		private void PlaceBreakoutOrders()
+		{
+			//// Buy stop order above the opening range high
+			entryLongOrder = SubmitOrderUnmanaged(0, OrderAction.Buy, OrderType.StopMarket, 1, 0, High[0] + TickSize, "oco" + CurrentBar, "Buy Stop");
+
+			//// Sell stop order below the opening range low
+			entryShortOrder = SubmitOrderUnmanaged(0, OrderAction.SellShort, OrderType.StopMarket, 1, 0, Low[0] - TickSize, "oco" + CurrentBar, "Sell Stop");
+
+		}
+
+        private void AssignOrderToVariable(ref Order order)
+        {
+            // Assign Order variable from OnOrderUpdate() to ensure the assignment occurs when expected.
+            // This is more reliable than assigning the return Order object from the submission method as the assignment is not guaranteed to be complete if it is referenced immediately after submitting
+            if (order.Name == "Buy Stop" && entryLongOrder != order)
+                entryLongOrder = order;
+
+            if (order.Name == "Sell Stop" && entryShortOrder != order)
+                entryShortOrder = order;
+        }
+
+        protected override void OnExecutionUpdate(Cbi.Execution execution, string executionId, double price, int quantity, Cbi.MarketPosition marketPosition, string orderId, DateTime time)
+        {
+            // if the long entry filled, place a profit target and stop loss to protect the order
+            if (entryLongOrder != null && execution.Order == entryLongOrder)
+            {
+                // generate a new oco string for the protective stop and target
+                string ocoString = string.Format("profitstoploss"+CurrentBar, DateTime.Now.ToString("hhmmssffff"));
+                // submit a protective profit target order
+                profitTarget = SubmitOrderUnmanaged(0, OrderAction.Sell, OrderType.Limit, 1, (High[0] + ProfitTarget * TickSize), 0, ocoString, "longProfitTarget");
+                // submit a protective stop loss order
+                //stopLoss =  SubmitOrderUnmanaged(0, OrderAction.Sell, OrderType.StopMarket, 1, 0, (Low[0] - 1 * TickSize), ocoString, "longStopLoss");
+				stopLoss =  SubmitOrderUnmanaged(0, OrderAction.Sell, OrderType.StopMarket, 1, 0, Low[0] - 1*TickSize, ocoString, "longStopLoss");
+            }
+
+            // reverse the order types and prices for a short
+            else if (entryShortOrder != null && execution.Order == entryShortOrder)
+            {
+                string ocoString = string.Format("profitstoploss"+CurrentBar, DateTime.Now.ToString("hhmmssffff"));
+                profitTarget = SubmitOrderUnmanaged(0, OrderAction.BuyToCover, OrderType.Limit, 1, (Low[0] - ProfitTarget * TickSize), 0, ocoString, "shortProfitTarget");
+                //stopLoss = SubmitOrderUnmanaged(0, OrderAction.BuyToCover, OrderType.StopMarket, 1, 0, (High[0] + 1 * TickSize), ocoString, "shortStopLoss");
+				stopLoss = SubmitOrderUnmanaged(0, OrderAction.BuyToCover, OrderType.StopMarket, 1, 0,  High[0] + 1*TickSize, ocoString, "shortStopLoss");
+            }
+
+            // I didn't use Order variables to track the stop loss and profit target, but I could have
+            // Instead, I detect the orders when the fill by their signalName
+            // (the execution.Name is the signalName provided with the order)
+
+            // when the long profit or stop fills, set the long entry to null to allow a new entry
+            else if (execution.Name == "longProfitTarget" || execution.Name == "longStopLoss" || execution.Name == "shortProfitTarget" || execution.Name == "shortStopLoss")
+            {
+                entryLongOrder = null;
+                entryShortOrder = null;
+				stopLoss = null;
+				profitTarget = null;
+            }
+        }
+
+        protected override void OnOrderUpdate(Cbi.Order order, double limitPrice, double stopPrice,int quantity, int filled, double averageFillPrice,
+			Cbi.OrderState orderState, DateTime time, Cbi.ErrorCode error, string comment)
+		{
+            AssignOrderToVariable(ref order);
+        }
+		
+[NinjaScriptProperty]
+[Display(Name="ProfitTarget", Description="Target ticks", Order=1, GroupName="Parameters")]
+public int ProfitTarget
+{ get; set; }
+
+
+[NinjaScriptProperty]
+[Display(Name="StopLoss", Description="Stop Loss", Order=1, GroupName="Parameters")]
+public int StopLoss
+{ get; set; }
+
+
+    }
+}
