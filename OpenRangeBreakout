@@ -69,19 +69,25 @@ namespace NinjaTrader.NinjaScript.Strategies.ORB
 		{
 			if (Time[0].Hour == 09 && Time[0].Minute == 30)
 			{
+				entryLongOrder=null;
+				entryShortOrder= null;
 				Draw.Line(this, "5 min orb high" + CurrentBar, false, 1, High[0] + TickSize * 1, -1, High[0] + TickSize * 1, Brushes.Orange, DashStyleHelper.Solid, 2, false);
 				Draw.Line(this, "5 min orb low" + CurrentBar, false, 1, Low[0] - TickSize * 1, -1, Low[0] - TickSize * 1, Brushes.Orange, DashStyleHelper.Solid, 2, false);
 				
-				if(entryLongOrder==null && entryShortOrder== null)
+				
 					PlaceBreakoutOrders();
 			}
+			
+	
+					
 		}
 
 		private void PlaceBreakoutOrders()
 		{
+		
 			//// Buy stop order above the opening range high
-			entryLongOrder = SubmitOrderUnmanaged(0, OrderAction.Buy, OrderType.StopMarket, 1, 0, High[0] + TickSize, "oco" + CurrentBar, "Buy Stop");
-
+				entryLongOrder = SubmitOrderUnmanaged(0, OrderAction.Buy, OrderType.StopMarket, 1, 0, High[0] + TickSize, "oco" + CurrentBar, "Buy Stop");
+		
 			//// Sell stop order below the opening range low
 			entryShortOrder = SubmitOrderUnmanaged(0, OrderAction.SellShort, OrderType.StopMarket, 1, 0, Low[0] - TickSize, "oco" + CurrentBar, "Sell Stop");
 
