@@ -1,0 +1,141 @@
+#region Using declarations
+using System;
+using System.Collections.Generic;
+using System.ComponentModel;
+using System.ComponentModel.DataAnnotations;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+using System.Windows;
+using System.Windows.Input;
+using System.Windows.Media;
+using System.Xml.Serialization;
+using NinjaTrader.Cbi;
+using NinjaTrader.Gui;
+using NinjaTrader.Gui.Chart;
+using NinjaTrader.Gui.SuperDom;
+using NinjaTrader.Gui.Tools;
+using NinjaTrader.Data;
+using NinjaTrader.NinjaScript;
+using NinjaTrader.Core.FloatingPoint;
+using NinjaTrader.NinjaScript.Indicators;
+using NinjaTrader.NinjaScript.DrawingTools;
+#endregion
+
+//This namespace holds Strategies in this folder and is required. Do not change it. 
+namespace NinjaTrader.NinjaScript.Strategies.TraderTom
+{
+	public class TT1BarPositiveNegative : Strategy
+	{
+
+
+		
+		
+		[NinjaScriptProperty]
+		[Display(Name="ProfitTarget", Description="Target ticks", Order=1, GroupName="Parameters")]
+		public int ProfitTarget
+		{ get; set; }
+		
+		[NinjaScriptProperty]
+		[Display(Name="StopLoss", Description="Target ticks", Order=1, GroupName="Parameters")]
+		public int StopLoss
+		{ get; set; }
+		
+		protected override void OnStateChange()
+		{
+			if (State == State.SetDefaults)
+			{
+				Description									= @"Enter the description for your new custom Strategy here.";
+				Name										= "TT1BarNegativePositiveTrend";
+				Calculate									= Calculate.OnEachTick;
+				EntriesPerDirection							= 1;
+				EntryHandling								= EntryHandling.AllEntries;
+				IsExitOnSessionCloseStrategy				= true;
+				ExitOnSessionCloseSeconds					= 30;
+				IsFillLimitOnTouch							= false;
+				MaximumBarsLookBack							= MaximumBarsLookBack.TwoHundredFiftySix;
+				OrderFillResolution							= OrderFillResolution.Standard;
+				Slippage									= 0;
+				StartBehavior								= StartBehavior.WaitUntilFlat;
+				TimeInForce									= TimeInForce.Gtc;
+				TraceOrders									= false;
+				RealtimeErrorHandling						= RealtimeErrorHandling.StopCancelClose;
+				StopTargetHandling							= StopTargetHandling.PerEntryExecution;
+				BarsRequiredToTrade							= 20;
+				ProfitTarget = 40;
+				StopLoss = 20;
+				// Disable this property for performance gains in Strategy Analyzer optimizations
+				// See the Help Guide for additional information
+				IsInstantiatedOnEachOptimizationIteration	= true;
+			}
+			else if (State == State.Configure)
+			{
+			}
+		}
+
+		protected override void OnBarUpdate()
+		{
+			if (CurrentBar < 1) return;
+			
+			
+
+				if(Time[0].Hour == 9 && Time[0].Minute == 30)
+				{
+					
+					if (Position.MarketPosition == MarketPosition.Flat && Close[0] < Open[0])
+					{
+						// Set Exits (Note: NinjaTrader uses currency, ticks, or percent. Using Ticks here)
+						SetProfitTarget("Short ORB", CalculationMode.Ticks, ProfitTarget);
+						SetStopLoss("Short ORB", CalculationMode.Ticks, StopLoss, false);
+	
+						
+						
+						// Enter Short at the Low of the signal bar
+						EnterShortStopMarket(1, Low[0], "Short ORB");
+						
+						
+						
+						// Plot Triangle Up (mimicking plotshape)
+						Draw.TriangleUp(this, "Signal" + CurrentBar, true, 0, Low[0] - TickSize, Brushes.Green);
+					}
+				}
+				
+				if(Time[0].Hour == 9 && Time[0].Minute == 30)
+				{
+					
+					if (Position.MarketPosition == MarketPosition.Flat && Close[0] > Open[0])
+					{
+						// Set Exits (Note: NinjaTrader uses currency, ticks, or percent. Using Ticks here)
+						SetProfitTarget("Long ORB", CalculationMode.Ticks, ProfitTarget);
+						SetStopLoss("Long ORB", CalculationMode.Ticks, StopLoss, false);
+	
+						// Enter Short at the Low of the signal bar
+						EnterLongStopMarket(1, High[0], "Long ORB");
+						
+						// Plot Triangle Up (mimicking plotshape)
+						Draw.TriangleUp(this, "Signal" + CurrentBar, true, 0, Low[0] - TickSize, Brushes.Green);
+					}
+				}
+			
+			
+//			if (Time[0].Hour == 9 && Time[0].Minute == 30)
+//			{
+//				// Condition: No position and Bearish Bar (Close < Open)
+//				if (Position.MarketPosition == MarketPosition.Flat && Close[0] < Open[0])
+//				{
+//					// Set Exits (Note: NinjaTrader uses currency, ticks, or percent. Using Ticks here)
+//					SetProfitTarget("Short ORB", CalculationMode.Ticks, ProfitTarget);
+//					SetStopLoss("Short ORB", CalculationMode.Ticks, StopLoss, false);
+
+//					// Enter Short at the Low of the signal bar
+//					EnterShortStopMarket(1, Low[0], "Short ORB");
+					
+//					// Plot Triangle Up (mimicking plotshape)
+//					Draw.TriangleUp(this, "Signal" + CurrentBar, true, 0, Low[0] - TickSize, Brushes.Green);
+//				}
+//			}
+		}
+	}
+}
+
+
