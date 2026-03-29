@@ -1,0 +1,100 @@
+#region Using declarations
+using System;
+using System.Collections.Generic;
+using System.ComponentModel;
+using System.ComponentModel.DataAnnotations;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+using System.Windows;
+using System.Windows.Input;
+using System.Windows.Media;
+using System.Xml.Serialization;
+using NinjaTrader.Cbi;
+using NinjaTrader.Gui;
+using NinjaTrader.Gui.Chart;
+using NinjaTrader.Gui.SuperDom;
+using NinjaTrader.Gui.Tools;
+using NinjaTrader.Data;
+using NinjaTrader.NinjaScript;
+using NinjaTrader.Core.FloatingPoint;
+using NinjaTrader.NinjaScript.Indicators;
+using NinjaTrader.NinjaScript.DrawingTools;
+#endregion
+
+//This namespace holds Strategies in this folder and is required. Do not change it. 
+namespace NinjaTrader.NinjaScript.Strategies.Templates
+{
+
+    public class UngerModularTemplate : Strategy
+    {
+        private double 	openingRangeHigh = 0;
+        private bool 	isSetupValid 	 = false;
+
+        protected override void OnStateChange()
+        {
+            if (State == State.SetDefaults)
+            {
+                Description = "Modular Unger Breakout: Engine + Filter + Time Exit";
+                Name 		= "UngerModularTemplate";
+                Calculate 	= Calculate.OnBarClose;
+                
+                // User-defined parameters for "Robustness Testing"
+                // Andrea Unger recommends testing these in a range (e.g., 20, 25, 30)
+                AddPlot(Brushes.Transparent, "DummyPlot"); 
+            }
+            else if (State == State.Configure)
+            {
+                // Station 1: The Multi-Timeframe Filter (Optional)
+                // AddDataSeries(BarsPeriodType.Minute, 60); 
+            }
+        }
+
+        protected override void OnBarUpdate()
+        {
+            // --- STATION 1: THE ENGINE (Opening Range Calculation) ---
+            // Define the 30-minute Opening Range (9:30 AM to 10:00 AM EST)
+            if (ToTime(Time[0]) == 093000)
+            {
+                openingRangeHigh = 0; // Reset daily
+                isSetupValid = false;
+            }
+
+            if (ToTime(Time[0]) >= 093000 && ToTime(Time[0]) <= 100000)
+            {
+                openingRangeHigh = Math.Max(openingRangeHigh, High[0]);
+            }
+
+            // --- STATION 2: THE FILTER (Permission Slip) ---
+            // Only trade if current volatility (ATR 5) is higher than long-term average (ATR 50)
+            // This ensures we aren't trading a "dead" market.
+            bool volatilityFilter = ATR(5)[0] > ATR(50)[0];
+            
+            // Time filter: Only allow entries between 10:01 AM and 2:00 PM
+            bool timeFilter = ToTime(Time[0]) > 100000 && ToTime(Time[0]) < 140000;
+
+            // --- STATION 3: THE TRIGGER (The Action) ---
+            if (timeFilter && volatilityFilter && openingRangeHigh > 0)
+            {
+                if (CrossAbove(Close, openingRangeHigh, 1))
+                {
+                    EnterLong("UngerEntry");
+                }
+            }
+
+            // --- STATION 4: THE EXIT (The Safety Net) ---
+            if (Position.MarketPosition == MarketPosition.Long)
+            {
+                // 1. Protection: 40 tick Stop Loss
+                SetStopLoss(CalculationMode.Ticks, 40);
+
+                // 2. Unger Time Exit: Close at 3:45 PM (1545) to avoid EOD volatility
+                if (ToTime(Time[0]) >= 154500)
+                {
+                    ExitLong("TimeExit", "UngerEntry");
+                }
+            }
+        }
+    }
+}
+
